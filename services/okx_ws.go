@@ -10,7 +10,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// OKXTicker OKX WebSocket ticker 数据
+// OKXTicker 行情数据
 type OKXTicker struct {
 	InstType string `json:"instType"`
 	InstID   string `json:"instId"`
@@ -21,7 +21,6 @@ type OKXTicker struct {
 	Vol24h   string `json:"vol24h"`
 }
 
-// OKXWsMsg OKX WebSocket 消息
 type OKXWsMsg struct {
 	Event string      `json:"event"`
 	Arg   OKXWsArg    `json:"arg"`
@@ -43,8 +42,8 @@ type OKXInstrument struct {
 }
 
 type OKXInstResponse struct {
-	Code string           `json:"code"`
-	Data []OKXInstrument  `json:"data"`
+	Code string          `json:"code"`
+	Data []OKXInstrument `json:"data"`
 }
 
 // TickerPrice 内存中的价格缓存
@@ -58,45 +57,34 @@ type TickerPrice struct {
 	UpdatedAt time.Time
 }
 
-// PriceStore 价格存储
 var (
 	priceMap  = make(map[string]*TickerPrice)
 	priceMu   sync.RWMutex
-	allowSet  = make(map[string]bool) // 允许的 instId 白名单
+	allowSet  = make(map[string]bool)
 	allowMu   sync.RWMutex
-	wsRunning bool
-	wsStop    chan struct{}
 )
 
-// GetPrice 获取合约当前价格
+// GetPrice / GetAllPrices 等接口保持不变
 func GetPrice(symbol string) *TickerPrice {
 	priceMu.RLock()
 	defer priceMu.RUnlock()
 	return priceMap[symbol]
 }
 
-// GetAllPrices 获取所有合约价格
 func GetAllPrices() map[string]*TickerPrice {
 	priceMu.RLock()
 	defer priceMu.RUnlock()
-	result := make(map[string]*TickerPrice, len(priceMap))
+	r := make(map[string]*TickerPrice, len(priceMap))
 	for k, v := range priceMap {
-		result[k] = v
+		r[k] = v
 	}
-	return result
+	return r
 }
 
-// GetPriceMap 获取价格原始map
-func GetPriceMap() map[string]*TickerPrice {
-	return priceMap
-}
+func GetPriceMap() map[string]*TickerPrice          { return priceMap }
+func PriceMapMutex() *sync.RWMutex                   { return &priceMu }
 
-// PriceMapMutex 获取价格锁
-func PriceMapMutex() *sync.RWMutex {
-	return &priceMu
-}
-
-// fetchInstruments 获取产品列表并建立白名单（排除美股合约）
+// fetchInstruments 获取产品白名单（排除美股）
 func fetchInstruments() int {
 	resp, err := http.Get("https://www.okx.com/api/v5/public/instruments?instType=SWAP")
 	if err != nil {
@@ -107,12 +95,11 @@ func fetchInstruments() int {
 
 	var result OKXInstResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		log.Printf("[INST] 解析产品列表失败: %v", err)
+		log.Printf("[INST] 解析失败: %v", err)
 		return 0
 	}
-
 	if result.Code != "0" {
-		log.Printf("[INST] API错误: code=%s", result.Code)
+		log.Printf("[INST] API错误 code=%s", result.Code)
 		return 0
 	}
 
@@ -122,141 +109,149 @@ func fetchInstruments() int {
 	cryptoCount := 0
 	excludedCount := 0
 	allowSet = make(map[string]bool)
-
 	for _, inst := range result.Data {
-		// 排除美股合约 instCategory=3 和期权
 		if inst.InstCategory == "3" {
 			excludedCount++
 			continue
 		}
-		// 只保留加密币永续
-		if inst.InstCategory == "1" && isUSDTPerpetual(inst.InstID) {
+		if inst.InstCategory == "1" && isUSDT(inst.InstID) {
 			allowSet[inst.InstID] = true
 			cryptoCount++
 		}
 	}
-
-	log.Printf("[INST] 产品白名单: %d 个加密币永续, 已排除 %d 个美股/期权合约", cryptoCount, excludedCount)
+	log.Printf("[INST] 白名单: %d 加密币合约, 排除 %d 美股/期权", cryptoCount, excludedCount)
 	return cryptoCount
 }
 
-// StartOKXWebSocket 启动 OKX WebSocket 连接
+// StartOKXWebSocket 启动行情（WebSocket + REST兜底）
 func StartOKXWebSocket() {
-	// 先获取产品白名单
-	count := fetchInstruments()
-	if count == 0 {
-		log.Printf("[WS] 未能获取产品列表，跳过启动")
-		return
-	}
-
-	wsStop = make(chan struct{})
+	fetchInstruments()
 	go wsLoop()
+	go restPoller()
 }
 
 // StopOKXWebSocket 停止
-func StopOKXWebSocket() {
-	if wsStop != nil {
-		close(wsStop)
-		wsRunning = false
-	}
-}
+func StopOKXWebSocket() {}
 
 func wsLoop() {
 	url := "wss://ws.okx.com:8443/ws/v5/public"
-	wsRunning = true
+	log.Printf("[WS] 初始化连接...")
 
-	for wsRunning {
+	for {
 		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 		if err != nil {
-			log.Printf("[WS] 连接失败: %v, 5秒后重试", err)
+			log.Printf("[WS] 连接失败: %v, 5s重试", err)
 			time.Sleep(5 * time.Second)
 			continue
 		}
 
 		log.Printf("[WS] 已连接 OKX 公共频道")
-
-		// 订阅所有永续合约 tickers
-		subscribe := map[string]interface{}{
-			"op": "subscribe",
-			"args": []map[string]string{
-				{"channel": "tickers", "instType": "SWAP"},
-			},
+		sub := map[string]interface{}{
+			"op": "subscribe", "args": []map[string]string{{"channel": "tickers", "instType": "SWAP"}},
 		}
-		if err := conn.WriteJSON(subscribe); err != nil {
+		if err := conn.WriteJSON(sub); err != nil {
 			log.Printf("[WS] 订阅失败: %v", err)
 			conn.Close()
 			time.Sleep(5 * time.Second)
 			continue
 		}
-		log.Printf("[WS] 已订阅所有永续合约 tickers")
+		log.Printf("[WS] 已发送订阅")
 
-		// 读取消息循环
-		readLoop(conn)
+		// 读消息
+		tickerCount := 0
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				log.Printf("[WS] 断开 (%d条ticker): %v", tickerCount, err)
+				break
+			}
+
+			var wsMsg OKXWsMsg
+			if err := json.Unmarshal(msg, &wsMsg); err != nil {
+				var raw struct{ Event string; Code string; Msg string }
+				if json.Unmarshal(msg, &raw) == nil {
+					if raw.Event != "" {
+						log.Printf("[WS] 事件: %s code=%s msg=%s", raw.Event, raw.Code, raw.Msg)
+					}
+				}
+				continue
+			}
+
+			if wsMsg.Arg.Channel != "tickers" || len(wsMsg.Data) == 0 {
+				continue
+			}
+
+			tickerCount++
+			priceMu.Lock()
+			for _, t := range wsMsg.Data {
+				allowMu.RLock()
+				if !allowSet[t.InstID] {
+					allowMu.RUnlock()
+					continue
+				}
+				allowMu.RUnlock()
+				last := parseFloat(t.Last)
+				if last == 0 {
+					continue
+				}
+				priceMap[t.InstID] = &TickerPrice{
+					Symbol: t.InstID, LastPrice: last,
+					Open24h: parseFloat(t.Open24h), High24h: parseFloat(t.High24h),
+					Low24h: parseFloat(t.Low24h), Vol24h: parseFloat(t.Vol24h),
+					UpdatedAt: time.Now(),
+				}
+			}
+			priceMu.Unlock()
+		}
 		conn.Close()
-		log.Printf("[WS] 连接断开，5秒后重连")
+		log.Printf("[WS] 5s后重连...")
 		time.Sleep(5 * time.Second)
 	}
 }
 
-func readLoop(conn *websocket.Conn) {
-	for {
-		select {
-		case <-wsStop:
-			return
-		default:
-		}
-
-		_, msg, err := conn.ReadMessage()
+// restPoller REST API 兜底轮询（保证 WebSocket 不通时也有数据）
+func restPoller() {
+	tick := time.NewTicker(1 * time.Second)
+	defer tick.Stop()
+	for range tick.C {
+		resp, err := http.Get("https://www.okx.com/api/v5/market/tickers?instType=SWAP")
 		if err != nil {
-			log.Printf("[WS] 读取错误: %v", err)
-			return
-		}
-
-		var wsMsg OKXWsMsg
-		if err := json.Unmarshal(msg, &wsMsg); err != nil {
 			continue
 		}
-
-		// 只处理 tickers 数据
-		if wsMsg.Arg.Channel != "tickers" || len(wsMsg.Data) == 0 {
+		var result struct {
+			Code string      `json:"code"`
+			Data []OKXTicker `json:"data"`
+		}
+		json.NewDecoder(resp.Body).Decode(&result)
+		resp.Body.Close()
+		if result.Code != "0" {
 			continue
 		}
-
-		for _, ticker := range wsMsg.Data {
-			// 白名单过滤：排除美股等非加密币合约
+		priceMu.Lock()
+		for _, t := range result.Data {
 			allowMu.RLock()
-			allowed := allowSet[ticker.InstID]
-			allowMu.RUnlock()
-			if !allowed {
+			if !allowSet[t.InstID] {
+				allowMu.RUnlock()
 				continue
 			}
-
-			last := parseFloat(ticker.Last)
+			allowMu.RUnlock()
+			last := parseFloat(t.Last)
 			if last == 0 {
 				continue
 			}
-
-			priceMu.Lock()
-			priceMap[ticker.InstID] = &TickerPrice{
-				Symbol:    ticker.InstID,
-				LastPrice: last,
-				Open24h:   parseFloat(ticker.Open24h),
-				High24h:   parseFloat(ticker.High24h),
-				Low24h:    parseFloat(ticker.Low24h),
-				Vol24h:    parseFloat(ticker.Vol24h),
+			priceMap[t.InstID] = &TickerPrice{
+				Symbol: t.InstID, LastPrice: last,
+				Open24h: parseFloat(t.Open24h), High24h: parseFloat(t.High24h),
+				Low24h: parseFloat(t.Low24h), Vol24h: parseFloat(t.Vol24h),
 				UpdatedAt: time.Now(),
 			}
-			priceMu.Unlock()
 		}
+		priceMu.Unlock()
 	}
 }
 
-// isUSDTPerpetual 判断是否为 USDT 本位永续合约
-func isUSDTPerpetual(instID string) bool {
-	if len(instID) < 10 {
-		return false
-	}
-	if instID[len(instID)-4:] != "SWAP" {
+func isUSDT(instID string) bool {
+	if len(instID) < 11 {
 		return false
 	}
 	for i := 0; i <= len(instID)-4; i++ {
