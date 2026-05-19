@@ -18,7 +18,7 @@ echo "[1/3] 创建目录..."
 mkdir -p "$APP_DIR/frontend/css" "$APP_DIR/frontend/js"
 
 # 2. 下载预编译二进制 + 前端
-echo "[2/3] 下载程序..."
+echo "[2/4] 下载程序..."
 curl -sSL "$REPO/okx-monitor-linux" -o "$APP_DIR/okx-monitor"
 chmod +x "$APP_DIR/okx-monitor"
 
@@ -30,8 +30,14 @@ curl -sSL "$REPO/frontend/monitor.html"    -o "$APP_DIR/frontend/monitor.html"
 curl -sSL "$REPO/frontend/history.html"    -o "$APP_DIR/frontend/history.html"
 curl -sSL "$REPO/frontend/settings.html"   -o "$APP_DIR/frontend/settings.html"
 
-# 3. 创建 systemd 服务
-echo "[3/3] 创建系统服务..."
+# 3. 开放防火墙端口
+echo "[3/4] 开放防火墙..."
+if command -v ufw &>/dev/null; then
+    ufw allow $PORT/tcp 2>/dev/null && echo "  已开放 $PORT 端口" || true
+fi
+
+# 4. 创建 systemd 服务
+echo "[4/4] 创建系统服务..."
 cat > /etc/systemd/system/$SERVICE_NAME.service << EOF
 [Unit]
 Description=OKX Monitor - 合约异动监控交易系统
