@@ -1,0 +1,23 @@
+# 编译产物
+okx-monitor
+okx-monitor.exe
+okx-monitor.exe~
+
+# 配置
+config.json
+
+# 日志
+server.log
+
+# 部署打包
+deploy/
+*.tar.gz
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# 系统
+.DS_Store
+Thumbs.db

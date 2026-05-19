@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交易记录 - OKX Monitor</title>
+    <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OKX Monitor</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">主菜单</div>
+                <a href="/dashboard.html">
+                    <span class="nav-icon">📊</span>
+                    <span>仪表盘</span>
+                </a>
+                <a href="/monitor.html">
+                    <span class="nav-icon">🔔</span>
+                    <span>异动监控</span>
+                </a>
+                <a href="/history.html" class="active">
+                    <span class="nav-icon">📋</span>
+                    <span>交易记录</span>
+                </a>
+                <div class="nav-section">系统</div>
+                <a href="/settings.html">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统设置</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div class="user-name">admin</div>
+                        <div class="user-role">管理员</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <h1 class="topbar-title">交易记录</h1>
+                <div class="topbar-actions">
+                    <button class="btn btn-outline btn-sm" onclick="refreshData()">🔄 刷新</button>
+                    <button class="btn btn-outline btn-sm" onclick="logout()">退出登录</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- 统计概览 -->
+                <div class="stats-grid" id="historyStats">
+                    <div class="stat-card">
+                        <div class="stat-label">总交易次数</div>
+                        <div class="stat-value" id="statTotal">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">盈利次数</div>
+                        <div class="stat-value price-up" id="statWins">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">亏损次数</div>
+                        <div class="stat-value price-down" id="statLosses">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">胜率</div>
+                        <div class="stat-value" id="statWinRate">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">累计盈亏</div>
+                        <div class="stat-value" id="statTotalPnl">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">盈亏比</div>
+                        <div class="stat-value" id="statPnlRatio">--</div>
+                    </div>
+                </div>
+
+                <!-- 持仓历史 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">持仓历史</div>
+                            <div class="card-subtitle">所有已平仓和未平仓记录</div>
+                        </div>
+                        <div class="filter-bar" style="margin-bottom:0;">
+                            <select class="form-input" id="filterStatus" onchange="applyFilter()">
+                                <option value="">全部状态</option>
+                                <option value="open">持仓中</option>
+                                <option value="closed">已平仓</option>
+                            </select>
+                            <select class="form-input" id="filterSymbol2" onchange="applyFilter()">
+                                <option value="">全部合约</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>入场价</th>
+                                    <th>离场价</th>
+                                    <th>数量</th>
+                                    <th>开仓时间</th>
+                                    <th>平仓时间</th>
+                                    <th>盈亏</th>
+                                    <th>盈亏比</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTable">
+                                <tr><td colspan="10"><div class="loading-overlay"><div class="loading-spinner"></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        var allPositions = [];
+
+        async function loadHistory() {
+            var resp = await apiGet('/positions');
+            if (resp && resp.code === 200) {
+                allPositions = resp.data || [];
+                updateSymbolFilter();
+                applyFilter();
+            }
+        }
+
+        function updateSymbolFilter() {
+            var symbols = [];
+            allPositions.forEach(function (p) {
+                if (symbols.indexOf(p.symbol) === -1) symbols.push(p.symbol);
+            });
+            var sel = document.getElementById('filterSymbol2');
+            var html = '<option value="">全部合约</option>';
+            symbols.forEach(function (s) {
+                html += '<option value="' + s + '">' + s + '</option>';
+            });
+            sel.innerHTML = html;
+        }
+
+        function applyFilter() {
+            var status = document.getElementById('filterStatus').value;
+            var symbol = document.getElementById('filterSymbol2').value;
+
+            var filtered = allPositions.filter(function (p) {
+                if (status && p.status !== status) return false;
+                if (symbol && p.symbol !== symbol) return false;
+                return true;
+            });
+
+            // 按时间倒序
+            filtered.sort(function (a, b) {
+                return new Date(b.open_time) - new Date(a.open_time);
+            });
+
+            updateStats(filtered);
+            renderTable(filtered);
+        }
+
+        function updateStats(positions) {
+            var total = positions.length;
+            var wins = 0;
+            var losses = 0;
+            var totalPnl = 0;
+            var totalWin = 0;
+            var totalLoss = 0;
+
+            positions.forEach(function (p) {
+                if (p.pnl > 0) {
+                    wins++;
+                    totalWin += p.pnl;
+                } else if (p.pnl < 0) {
+                    losses++;
+                    totalLoss += Math.abs(p.pnl);
+                }
+                totalPnl += p.pnl;
+            });
+
+            var winRate = total > 0 ? (wins / total * 100).toFixed(1) + '%' : '--';
+            var pnlRatio = totalLoss > 0 ? (totalWin / totalLoss).toFixed(2) + 'x' : '--';
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statWins').textContent = wins;
+            document.getElementById('statLosses').textContent = losses;
+            document.getElementById('statWinRate').textContent = winRate;
+            document.getElementById('statTotalPnl').textContent = formatPnl(totalPnl);
+            document.getElementById('statPnlRatio').textContent = pnlRatio;
+
+            var pnlEl = document.getElementById('statTotalPnl');
+            pnlEl.className = 'stat-value ' + (totalPnl >= 0 ? 'price-up' : 'price-down');
+        }
+
+        function renderTable(positions) {
+            var tbody = document.getElementById('historyTable');
+
+            if (!positions.length) {
+                tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无交易记录</div></div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = positions.map(function (p) {
+                var dirBadge = p.direction === 'long'
+                    ? '<span class="badge-up">做多</span>'
+                    : '<span class="badge-down">做空</span>';
+                var pnlClass = p.pnl >= 0 ? 'price-up' : 'price-down';
+                var statusTag = p.status === 'open'
+                    ? '<span class="tag tag-warning">持仓中</span>'
+                    : '<span class="tag ' + (p.pnl >= 0 ? 'tag-success' : 'tag-danger') + '">已平仓</span>';
+                var closeTime = p.close_time ? formatTime(p.close_time) : '--';
+                var closePrice = p.close_price ? formatPrice(p.close_price) : '--';
+
+                return '<tr>' +
+                    '<td><strong>' + p.symbol + '</strong></td>' +
+                    '<td>' + dirBadge + '</td>' +
+                    '<td>' + formatPrice(p.entry_price) + '</td>' +
+                    '<td>' + closePrice + '</td>' +
+                    '<td>' + p.quantity + '</td>' +
+                    '<td>' + formatTime(p.open_time) + '</td>' +
+                    '<td>' + closeTime + '</td>' +
+                    '<td class="' + pnlClass + '" style="font-weight:600;">' + formatPnl(p.pnl) + '</td>' +
+                    '<td class="' + pnlClass + '">' + formatPct(p.pnl_pct, true) + '</td>' +
+                    '<td>' + statusTag + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function refreshData() {
+            loadHistory();
+            showToast('数据已刷新', 'success');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadHistory();
+            setInterval(loadHistory, 10000);
+        });
+    </script>
+</body>
+</html>

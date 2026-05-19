@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>异动监控 - OKX Monitor</title>
+    <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OKX Monitor</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">主菜单</div>
+                <a href="/dashboard.html">
+                    <span class="nav-icon">📊</span>
+                    <span>仪表盘</span>
+                </a>
+                <a href="/monitor.html" class="active">
+                    <span class="nav-icon">🔔</span>
+                    <span>异动监控</span>
+                </a>
+                <a href="/history.html">
+                    <span class="nav-icon">📋</span>
+                    <span>交易记录</span>
+                </a>
+                <div class="nav-section">系统</div>
+                <a href="/settings.html">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统设置</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div class="user-name">admin</div>
+                        <div class="user-role">管理员</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容 -->
+        <main class="main-content">
+            <header class="topbar">
+                <h1 class="topbar-title">异动监控</h1>
+                <div class="topbar-actions">
+                    <span>
+                        <span class="status-dot"></span>
+                        <span class="status-text" id="connectionStatus">监控运行中</span>
+                    </span>
+                    <button class="btn btn-outline btn-sm" onclick="refreshData()">🔄 刷新</button>
+                    <button class="btn btn-outline btn-sm" onclick="logout()">退出登录</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- 过滤栏 -->
+                <div class="card">
+                    <div class="filter-bar">
+                        <input type="text" class="form-input" id="filterSymbol" placeholder="🔍 搜索合约名称..." oninput="applyFilter()">
+                        <select class="form-input" id="filterDirection" onchange="applyFilter()">
+                            <option value="">全部方向</option>
+                            <option value="up">上涨</option>
+                            <option value="down">下跌</option>
+                        </select>
+                        <select class="form-input" id="filterOpened" onchange="applyFilter()">
+                            <option value="">全部状态</option>
+                            <option value="opened">已开仓</option>
+                            <option value="unopened">未开仓</option>
+                        </select>
+                        <span style="font-size:13px;color:var(--text-muted);margin-left:auto;" id="filterCount">共 0 条</span>
+                    </div>
+                </div>
+
+                <!-- 异动列表 -->
+                <div class="card" style="padding:0;overflow:hidden;">
+                    <div class="table-container" style="border:none;border-radius:0;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th style="width:50px;">#</th>
+                                    <th>时间</th>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>异动前价格</th>
+                                    <th>异动后价格</th>
+                                    <th style="min-width:100px;">涨跌幅</th>
+                                    <th>成交量(USD)</th>
+                                    <th>状态</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="alertsTable">
+                                <tr><td colspan="10"><div class="loading-overlay"><div class="loading-spinner"></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 分页 -->
+                <div class="pagination" id="pagination"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        var allAlerts = [];
+        var filteredAlerts = [];
+        var currentPage = 1;
+        var pageSize = 20;
+        var sseConnected = false;
+        var eventSource = null;
+
+        // ===== SSE 实时推送 =====
+        function connectSSE() {
+            var token = getToken();
+            if (!token) return;
+
+            if (eventSource) eventSource.close();
+
+            // SSE 需要 token 通过 query string 传递（EventSource 不支持自定义 header）
+            eventSource = new EventSource('/api/alerts/stream?token=' + encodeURIComponent(token));
+
+            eventSource.onopen = function () {
+                sseConnected = true;
+                document.getElementById('connectionStatus').textContent = '实时监控中 (SSE)';
+            };
+
+            eventSource.onmessage = function (event) {
+                try {
+                    var alert = JSON.parse(event.data);
+                    // 新异动插到最前面
+                    allAlerts.unshift(alert);
+                    // 最多保留 500 条
+                    if (allAlerts.length > 500) allAlerts = allAlerts.slice(0, 500);
+                    applyFilter();
+                } catch (e) {}
+            };
+
+            eventSource.onerror = function () {
+                sseConnected = false;
+                document.getElementById('connectionStatus').textContent = 'SSE断开，轮询中...';
+                eventSource.close();
+                // 5秒后重连
+                setTimeout(connectSSE, 5000);
+            };
+        }
+
+        // ===== 初始加载 =====
+        async function loadAlerts() {
+            var resp = await apiGet('/alerts');
+            if (resp && resp.code === 200) {
+                allAlerts = resp.data || [];
+                applyFilter();
+            }
+        }
+
+        function applyFilter() {
+            var symbol = (document.getElementById('filterSymbol').value || '').toUpperCase();
+            var direction = document.getElementById('filterDirection').value;
+            var opened = document.getElementById('filterOpened').value;
+
+            filteredAlerts = allAlerts.filter(function (a) {
+                if (symbol && a.symbol.indexOf(symbol) === -1) return false;
+                if (direction && a.direction !== direction) return false;
+                if (opened === 'opened' && !a.opened) return false;
+                if (opened === 'unopened' && a.opened) return false;
+                return true;
+            });
+
+            // 按时间倒序
+            filteredAlerts.sort(function (a, b) {
+                return new Date(b.time) - new Date(a.time);
+            });
+
+            currentPage = 1;
+            document.getElementById('filterCount').textContent = '共 ' + filteredAlerts.length + ' 条';
+            renderAlerts();
+        }
+
+        function renderAlerts() {
+            var tbody = document.getElementById('alertsTable');
+            var start = (currentPage - 1) * pageSize;
+            var page = filteredAlerts.slice(start, start + pageSize);
+
+            if (!page.length) {
+                tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">暂无异动记录</div></div></td></tr>';
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            tbody.innerHTML = page.map(function (a, i) {
+                var idx = start + i + 1;
+                var dirBadge = a.direction === 'up'
+                    ? '<span class="badge-up">上涨</span>'
+                    : '<span class="badge-down">下跌</span>';
+                var pctClass = a.change_pct > 0 ? 'price-up' : 'price-down';
+                var statusTag = a.opened
+                    ? '<span class="tag tag-success">已开仓</span>'
+                    : '<span class="tag tag-info">待处理</span>';
+                
+                var actionBtn = !a.opened
+                    ? '<button class="btn btn-primary btn-sm" onclick="openPosition(\'' + a.id + '\')">开仓</button>'
+                    : '<button class="btn btn-outline btn-sm" disabled>已开仓</button>';
+
+                return '<tr>' +
+                    '<td>' + idx + '</td>' +
+                    '<td>' + formatTime(a.time) + '</td>' +
+                    '<td><strong>' + a.symbol + '</strong></td>' +
+                    '<td>' + dirBadge + '</td>' +
+                    '<td>' + formatPrice(a.price_before) + '</td>' +
+                    '<td>' + formatPrice(a.price_after) + '</td>' +
+                    '<td><span class="' + pctClass + '" style="font-weight:600;font-size:14px;">' + formatPct(a.change_pct, true) + '</span></td>' +
+                    '<td>' + formatVolume(a.volume) + '</td>' +
+                    '<td>' + statusTag + '</td>' +
+                    '<td>' + actionBtn + '</td>' +
+                    '</tr>';
+            }).join('');
+
+            renderPagination();
+        }
+
+        function renderPagination() {
+            var totalPages = Math.ceil(filteredAlerts.length / pageSize);
+            if (totalPages <= 1) {
+                document.getElementById('pagination').innerHTML = '';
+                return;
+            }
+
+            var html = '';
+            html += '<button class="btn btn-outline btn-sm" onclick="goPage(' + (currentPage - 1) + ')" ' + (currentPage <= 1 ? 'disabled' : '') + '>上一页</button>';
+            html += '<span class="page-info">第 ' + currentPage + ' / ' + totalPages + ' 页</span>';
+            html += '<button class="btn btn-outline btn-sm" onclick="goPage(' + (currentPage + 1) + ')" ' + (currentPage >= totalPages ? 'disabled' : '') + '>下一页</button>';
+            document.getElementById('pagination').innerHTML = html;
+        }
+
+        function goPage(page) {
+            var totalPages = Math.ceil(filteredAlerts.length / pageSize);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            renderAlerts();
+            document.querySelector('.content-area').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function openPosition(alertId) {
+            showToast('模拟开仓: ' + alertId, 'info');
+            // TODO: 实际开仓逻辑，对接OKX API
+            setTimeout(function () { refreshData(); }, 500);
+        }
+
+        function refreshData() {
+            loadAlerts();
+            showToast('数据已刷新', 'success');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadAlerts();
+            connectSSE();
+            // 轮询作为 fallback
+            setInterval(function () {
+                if (!sseConnected) loadAlerts();
+            }, 10000);
+        });
+    </script>
+</body>
+</html>

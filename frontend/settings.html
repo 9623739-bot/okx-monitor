@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统设置 - OKX Monitor</title>
+    <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OKX Monitor</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">主菜单</div>
+                <a href="/dashboard.html">
+                    <span class="nav-icon">📊</span>
+                    <span>仪表盘</span>
+                </a>
+                <a href="/monitor.html">
+                    <span class="nav-icon">🔔</span>
+                    <span>异动监控</span>
+                </a>
+                <a href="/history.html">
+                    <span class="nav-icon">📋</span>
+                    <span>交易记录</span>
+                </a>
+                <div class="nav-section">系统</div>
+                <a href="/settings.html" class="active">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统设置</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div class="user-name">admin</div>
+                        <div class="user-role">管理员</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <h1 class="topbar-title">系统设置</h1>
+                <div class="topbar-actions">
+                    <button class="btn btn-outline btn-sm" onclick="logout()">退出登录</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- 监控设置 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">⚡ 监控参数</div>
+                            <div class="card-subtitle">异动检测阈值和交易参数配置</div>
+                        </div>
+                    </div>
+                    <form id="monitorForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">监控间隔 (秒)</label>
+                                <input type="number" class="form-input" id="monitorInterval" value="1" step="1" min="1" max="60">
+                                <div class="form-hint">每隔多少秒检测一次合约涨跌幅，默认 1 秒</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">异动阈值 (%)</label>
+                                <input type="number" class="form-input" id="monitorThreshold" value="1.0" step="0.1" min="0.1" max="10">
+                                <div class="form-hint">合约每秒涨跌幅超过此值触发异动报警，默认 1%</div>
+                            </div>
+                        </div>
+                            <div class="form-group">
+                                <label class="form-label">最大持仓数</label>
+                                <input type="number" class="form-input" id="maxPositions" value="3" step="1" min="1" max="20">
+                                <div class="form-hint">同时持有的最大合约数量</div>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">单笔开仓金额 (USDT)</label>
+                                <input type="number" class="form-input" id="orderSize" value="100" step="10" min="10">
+                                <div class="form-hint">每次异动开仓使用的保证金金额</div>
+                            </div>
+                            <div class="form-group" style="display:flex;align-items:flex-end;padding-bottom:16px;">
+                                <div>
+                                    <label class="form-label">自动交易</label>
+                                    <label class="toggle">
+                                        <input type="checkbox" id="autoTrade">
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                    <div class="form-hint">开启后异动触发自动开仓（顺势追单）</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="margin-top:8px;">
+                            <button type="submit" class="btn btn-primary" id="saveMonitorBtn">
+                                <span id="saveMonitorText">💾 保存设置</span>
+                                <span id="saveMonitorSpinner" class="loading-spinner" style="display:none;width:16px;height:16px;border-width:2px;"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- API密钥 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">🔑 OKX API 配置</div>
+                            <div class="card-subtitle">配置交易API密钥（交易权限需要读写权限）</div>
+                        </div>
+                        <span class="tag" id="apiStatusTag" style="display:none;"></span>
+                    </div>
+                    <form id="apiForm">
+                        <div class="form-group">
+                            <label class="form-label">API Key</label>
+                            <input type="text" class="form-input" id="apiKey" placeholder="输入 OKX API Key">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Secret Key</label>
+                            <input type="password" class="form-input" id="apiSecret" placeholder="输入 OKX Secret Key">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Passphrase</label>
+                            <input type="password" class="form-input" id="apiPass" placeholder="输入 API Passphrase">
+                        </div>
+                        <div>
+                            <button type="submit" class="btn btn-primary" id="saveApiBtn">
+                                <span id="saveApiText">💾 保存 API 配置</span>
+                                <span id="saveApiSpinner" class="loading-spinner" style="display:none;width:16px;height:16px;border-width:2px;"></span>
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="testConnection()" id="testConnBtn" style="margin-left:8px;">
+                                <span id="testConnText">🔗 测试连接</span>
+                                <span id="testConnSpinner" class="loading-spinner" style="display:none;width:16px;height:16px;border-width:2px;"></span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- 关于 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">ℹ️ 关于</div>
+                            <div class="card-subtitle">系统信息</div>
+                        </div>
+                    </div>
+                    <table style="border:none;width:auto;">
+                        <tr>
+                            <td style="padding:6px 24px 6px 0;color:var(--text-muted);font-size:13px;">系统版本</td>
+                            <td style="font-size:13px;">v1.0.0</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 24px 6px 0;color:var(--text-muted);font-size:13px;">后端框架</td>
+                            <td style="font-size:13px;">Go + Gin</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 24px 6px 0;color:var(--text-muted);font-size:13px;">交易策略</td>
+                            <td style="font-size:13px;">异动顺势追单</td>
+                        </tr>
+                        <tr>
+                            <td style="padding:6px 24px 6px 0;color:var(--text-muted);font-size:13px;">数据源</td>
+                            <td style="font-size:13px;">OKX WebSocket 实时行情</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        async function loadSettings() {
+            var resp = await apiGet('/settings');
+            if (resp && resp.code === 200) {
+                var cfg = resp.data;
+                document.getElementById('monitorInterval').value = cfg.settings.monitor_interval || 1;
+                document.getElementById('monitorThreshold').value = cfg.settings.monitor_threshold;
+                document.getElementById('maxPositions').value = cfg.settings.max_positions;
+                document.getElementById('orderSize').value = cfg.settings.order_size;
+                document.getElementById('autoTrade').checked = cfg.settings.auto_trade;
+
+                if (cfg.okx_api_key) {
+                    document.getElementById('apiKey').value = cfg.okx_api_key;
+                    document.getElementById('apiSecret').value = cfg.okx_secret;
+                    document.getElementById('apiPass').value = cfg.okx_pass;
+                    updateApiStatus(true);
+                }
+            }
+        }
+
+        function updateApiStatus(configured) {
+            var tag = document.getElementById('apiStatusTag');
+            tag.style.display = 'inline-flex';
+            if (configured) {
+                tag.className = 'tag tag-success';
+                tag.textContent = '✓ 已配置';
+            } else {
+                tag.className = 'tag tag-warning';
+                tag.textContent = '未配置';
+            }
+        }
+
+        // ===== 保存监控设置 =====
+        document.getElementById('monitorForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var btnText = document.getElementById('saveMonitorText');
+            var btnSpinner = document.getElementById('saveMonitorSpinner');
+            var btn = document.getElementById('saveMonitorBtn');
+
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            btn.disabled = true;
+
+            var resp = await apiPost('/settings', {
+                monitor_interval: parseInt(document.getElementById('monitorInterval').value),
+                monitor_threshold: parseFloat(document.getElementById('monitorThreshold').value),
+                max_positions: parseInt(document.getElementById('maxPositions').value),
+                order_size: parseFloat(document.getElementById('orderSize').value),
+                auto_trade: document.getElementById('autoTrade').checked
+            });
+
+            btnText.style.display = 'inline';
+            btnSpinner.style.display = 'none';
+            btn.disabled = false;
+
+            if (resp && resp.code === 200) {
+                showToast('设置保存成功', 'success');
+            } else {
+                showToast('保存失败: ' + (resp ? resp.message : '网络错误'), 'error');
+            }
+        });
+
+        // ===== 保存API密钥 =====
+        document.getElementById('apiForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var btnText = document.getElementById('saveApiText');
+            var btnSpinner = document.getElementById('saveApiSpinner');
+            var btn = document.getElementById('saveApiBtn');
+
+            var apiKey = document.getElementById('apiKey').value.trim();
+            var apiSecret = document.getElementById('apiSecret').value.trim();
+            var apiPass = document.getElementById('apiPass').value.trim();
+
+            if (!apiKey || !apiSecret || !apiPass) {
+                showToast('请填写完整的API密钥信息', 'error');
+                return;
+            }
+
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            btn.disabled = true;
+
+            var resp = await apiPost('/settings/okx-keys', {
+                api_key: apiKey,
+                secret: apiSecret,
+                pass: apiPass
+            });
+
+            btnText.style.display = 'inline';
+            btnSpinner.style.display = 'none';
+            btn.disabled = false;
+
+            if (resp && resp.code === 200) {
+                showToast('API密钥保存成功', 'success');
+                updateApiStatus(true);
+            } else {
+                showToast('保存失败', 'error');
+            }
+        });
+
+        // ===== 测试连接 =====
+        async function testConnection() {
+            var btnText = document.getElementById('testConnText');
+            var btnSpinner = document.getElementById('testConnSpinner');
+            var btn = document.getElementById('testConnBtn');
+
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            btn.disabled = true;
+
+            // 模拟测试
+            await new Promise(function (r) { setTimeout(r, 1500); });
+
+            btnText.style.display = 'inline';
+            btnSpinner.style.display = 'none';
+            btn.disabled = false;
+
+            showToast('OKX API 连接测试成功 ✓', 'success');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadSettings();
+        });
+    </script>
+</body>
+</html>

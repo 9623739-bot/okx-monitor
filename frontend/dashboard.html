@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>仪表盘 - OKX Monitor</title>
+    <link rel="stylesheet" href="css/base.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OKX Monitor</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">主菜单</div>
+                <a href="/dashboard.html" class="active">
+                    <span class="nav-icon">📊</span>
+                    <span>仪表盘</span>
+                </a>
+                <a href="/monitor.html">
+                    <span class="nav-icon">🔔</span>
+                    <span>异动监控</span>
+                </a>
+                <a href="/history.html">
+                    <span class="nav-icon">📋</span>
+                    <span>交易记录</span>
+                </a>
+                <div class="nav-section">系统</div>
+                <a href="/settings.html">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统设置</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div class="user-name">admin</div>
+                        <div class="user-role">管理员</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主内容 -->
+        <main class="main-content">
+            <header class="topbar">
+                <h1 class="topbar-title">仪表盘</h1>
+                <div class="topbar-actions">
+                    <span>
+                        <span class="status-dot"></span>
+                        <span class="status-text">系统运行中</span>
+                    </span>
+                    <button class="btn btn-outline btn-sm" onclick="logout()">退出登录</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- 统计卡片 -->
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card">
+                        <div class="stat-label">总异动次数</div>
+                        <div class="stat-value" id="statTotalAlerts">--</div>
+                        <div class="stat-change badge-up" id="statTodayAlerts" style="display:none;"></div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">当前持仓</div>
+                        <div class="stat-value" id="statOpenPositions">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">总交易次数</div>
+                        <div class="stat-value" id="statTotalTrades">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">胜率</div>
+                        <div class="stat-value" id="statWinRate">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">累计盈亏</div>
+                        <div class="stat-value" id="statTotalPnl">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">今日异动</div>
+                        <div class="stat-value" id="statTodayCount">--</div>
+                    </div>
+                </div>
+
+                <!-- 最近异动 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">最近异动</div>
+                            <div class="card-subtitle">实时监控合约价格异动</div>
+                        </div>
+                        <a href="/monitor.html" class="btn btn-outline btn-sm">查看全部</a>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>时间</th>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>异动前</th>
+                                    <th>异动后</th>
+                                    <th>涨跌幅</th>
+                                    <th>成交量</th>
+                                    <th>状态</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentAlertsTable">
+                                <tr><td colspan="8"><div class="loading-overlay"><div class="loading-spinner"></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 当前持仓 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">当前持仓</div>
+                            <div class="card-subtitle">未平仓合约</div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>入场价</th>
+                                    <th>数量</th>
+                                    <th>开仓时间</th>
+                                    <th>浮动盈亏</th>
+                                    <th>盈亏比</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsTable">
+                                <tr><td colspan="7"><div class="loading-overlay"><div class="loading-spinner"></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/common.js"></script>
+    <script>
+        var alerts = [];
+
+        // ===== SSE 实时异动 =====
+        function connectDashboardSSE() {
+            var token = getToken();
+            if (!token) return;
+            var es = new EventSource('/api/alerts/stream?token=' + encodeURIComponent(token));
+            es.onmessage = function (event) {
+                try {
+                    var a = JSON.parse(event.data);
+                    alerts.unshift(a);
+                    if (alerts.length > 500) alerts = alerts.slice(0, 500);
+                    renderAlerts(alerts);
+                    loadStats();
+                } catch (e) {}
+            };
+            es.onerror = function () { es.close(); setTimeout(connectDashboardSSE, 5000); };
+        }
+
+        // ===== 加载数据 =====
+        async function loadDashboard() {
+            var alertsResp = await apiGet('/alerts');
+            alerts = alertsResp && alertsResp.data || [];
+            loadStats();
+            renderAlerts(alerts);
+            loadPositions();
+        }
+
+        async function loadStats() {
+            var resp = await apiGet('/stats');
+            renderStats(resp && resp.data);
+        }
+
+        async function loadPositions() {
+            var posResp = await apiGet('/positions');
+            renderPositions(posResp && posResp.data || []);
+        }
+        }
+
+        function renderStats(stats) {
+            if (!stats) return;
+            document.getElementById('statTotalAlerts').textContent = stats.total_alerts;
+            document.getElementById('statOpenPositions').textContent = stats.open_positions;
+            document.getElementById('statTotalTrades').textContent = stats.total_trades;
+            document.getElementById('statWinRate').textContent = (stats.win_rate || 0).toFixed(1) + '%';
+            document.getElementById('statTodayCount').textContent = stats.today_alerts;
+
+            var pnl = stats.total_pnl || 0;
+            var pnlEl = document.getElementById('statTotalPnl');
+            pnlEl.textContent = formatPnl(pnl);
+            pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'price-up' : 'price-down');
+        }
+
+        function renderAlerts(alerts) {
+            var tbody = document.getElementById('recentAlertsTable');
+            if (!alerts.length) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">暂无异动记录</div></div></td></tr>';
+                return;
+            }
+
+            // 取最近10条
+            var recent = alerts.slice(-10).reverse();
+            tbody.innerHTML = recent.map(function (a) {
+                var dirBadge = a.direction === 'up'
+                    ? '<span class="badge-up">上涨</span>'
+                    : '<span class="badge-down">下跌</span>';
+                var pctClass = a.change_pct > 0 ? 'price-up' : 'price-down';
+                var statusTag = a.opened
+                    ? '<span class="tag tag-success">已开仓</span>'
+                    : '<span class="tag tag-info">未开仓</span>';
+                return '<tr>' +
+                    '<td>' + formatTime(a.time) + '</td>' +
+                    '<td><strong>' + a.symbol + '</strong></td>' +
+                    '<td>' + dirBadge + '</td>' +
+                    '<td>' + formatPrice(a.price_before) + '</td>' +
+                    '<td>' + formatPrice(a.price_after) + '</td>' +
+                    '<td class="' + pctClass + '">' + formatPct(a.change_pct, true) + '</td>' +
+                    '<td>' + formatVolume(a.volume) + '</td>' +
+                    '<td>' + statusTag + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function renderPositions(positions) {
+            var tbody = document.getElementById('positionsTable');
+            var openPositions = positions.filter(function (p) { return p.status === 'open'; });
+
+            if (!openPositions.length) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">暂无持仓</div></div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = openPositions.map(function (p) {
+                var dirBadge = p.direction === 'long'
+                    ? '<span class="badge-up">做多</span>'
+                    : '<span class="badge-down">做空</span>';
+                var pnlClass = p.pnl >= 0 ? 'price-up' : 'price-down';
+                return '<tr>' +
+                    '<td><strong>' + p.symbol + '</strong></td>' +
+                    '<td>' + dirBadge + '</td>' +
+                    '<td>' + formatPrice(p.entry_price) + '</td>' +
+                    '<td>' + p.quantity + '</td>' +
+                    '<td>' + formatTime(p.open_time) + '</td>' +
+                    '<td class="' + pnlClass + '">' + formatPnl(p.pnl) + '</td>' +
+                    '<td class="' + pnlClass + '">' + formatPct(p.pnl_pct, true) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        // ===== 初始化 =====
+        document.addEventListener('DOMContentLoaded', function () {
+            loadDashboard();
+            connectDashboardSSE();
+            setInterval(function () { loadStats(); loadPositions(); }, 10000);
+        });
+    </script>
+</body>
+</html>
