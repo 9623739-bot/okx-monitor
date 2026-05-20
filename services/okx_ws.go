@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-// OKXTicker 行情数据
 type OKXTicker struct {
 	InstType string `json:"instType"`
 	InstID   string `json:"instId"`
@@ -33,7 +34,6 @@ type OKXWsArg struct {
 	InstType string `json:"instType"`
 }
 
-// OKXInstrument 产品信息
 type OKXInstrument struct {
 	InstType     string `json:"instType"`
 	InstID       string `json:"instId"`
@@ -46,7 +46,6 @@ type OKXInstResponse struct {
 	Data []OKXInstrument `json:"data"`
 }
 
-// TickerPrice 内存中的价格缓存
 type TickerPrice struct {
 	Symbol    string
 	LastPrice float64
@@ -58,13 +57,12 @@ type TickerPrice struct {
 }
 
 var (
-	priceMap  = make(map[string]*TickerPrice)
-	priceMu   sync.RWMutex
-	allowSet  = make(map[string]bool)
-	allowMu   sync.RWMutex
+	priceMap = make(map[string]*TickerPrice)
+	priceMu  sync.RWMutex
+	allowSet = make(map[string]bool)
+	allowMu  sync.RWMutex
 )
 
-// GetPrice / GetAllPrices 等接口保持不变
 func GetPrice(symbol string) *TickerPrice {
 	priceMu.RLock()
 	defer priceMu.RUnlock()
@@ -81,10 +79,9 @@ func GetAllPrices() map[string]*TickerPrice {
 	return r
 }
 
-func GetPriceMap() map[string]*TickerPrice          { return priceMap }
-func PriceMapMutex() *sync.RWMutex                   { return &priceMu }
+func GetPriceMap() map[string]*TickerPrice { return priceMap }
+func PriceMapMutex() *sync.RWMutex         { return &priceMu }
 
-// fetchInstruments 获取产品白名单（排除美股）
 func fetchInstruments() int {
 	resp, err := http.Get("https://www.okx.com/api/v5/public/instruments?instType=SWAP")
 	if err != nil {
@@ -123,20 +120,17 @@ func fetchInstruments() int {
 	return cryptoCount
 }
 
-// StartOKXWebSocket 启动行情
 func StartOKXWebSocket() {
 	fetchInstruments()
 	go wsLoop()
 }
 
-// StopOKXWebSocket 停止
 func StopOKXWebSocket() {}
 
 func wsLoop() {
 	url := "wss://ws.okx.com:8443/ws/v5/public"
-	log.Printf("[WS] 初始化连接...")
+	log.Printf("[WS] 初始化...")
 
-	// 构建 instId 列表
 	allowMu.RLock()
 	ids := make([]string, 0, len(allowSet))
 	for id := range allowSet {
@@ -152,10 +146,9 @@ func wsLoop() {
 			time.Sleep(5 * time.Second)
 			continue
 		}
-
 		log.Printf("[WS] 已连接")
 
-		// 分批订阅（每批100个）
+		// 分批订阅
 		batch := 100
 		for i := 0; i < len(ids); i += batch {
 			end := i + batch
@@ -166,13 +159,23 @@ func wsLoop() {
 			for j, id := range ids[i:end] {
 				args[j] = map[string]string{"channel": "tickers", "instId": id}
 			}
-			sub := map[string]interface{}{"op": "subscribe", "args": args}
-			if err := conn.WriteJSON(sub); err != nil {
+			if err := conn.WriteJSON(map[string]interface{}{"op": "subscribe", "args": args}); err != nil {
 				log.Printf("[WS] 订阅失败: %v", err)
 				break
 			}
 		}
 		log.Printf("[WS] 订阅已发送")
+
+		// 心跳保活（OKX 要求 30s 内至少一次 ping）
+		go func(c *websocket.Conn) {
+			ticker := time.NewTicker(20 * time.Second)
+			defer ticker.Stop()
+			for range ticker.C {
+				if err := c.WriteMessage(websocket.TextMessage, []byte("ping")); err != nil {
+					return
+				}
+			}
+		}(conn)
 
 		// 读消息
 		tickerCount := 0
@@ -185,12 +188,6 @@ func wsLoop() {
 
 			var wsMsg OKXWsMsg
 			if err := json.Unmarshal(msg, &wsMsg); err != nil {
-				var raw struct{ Event string; Code string; Msg string }
-				if json.Unmarshal(msg, &raw) == nil {
-					if raw.Event != "" {
-						log.Printf("[WS] 事件: %s code=%s msg=%s", raw.Event, raw.Code, raw.Msg)
-					}
-				}
 				continue
 			}
 
@@ -201,20 +198,17 @@ func wsLoop() {
 			tickerCount++
 			priceMu.Lock()
 			for _, t := range wsMsg.Data {
-				allowMu.RLock()
-				if !allowSet[t.InstID] {
-					allowMu.RUnlock()
-					continue
-				}
-				allowMu.RUnlock()
 				last := parseFloat(t.Last)
 				if last == 0 {
 					continue
 				}
 				priceMap[t.InstID] = &TickerPrice{
-					Symbol: t.InstID, LastPrice: last,
-					Open24h: parseFloat(t.Open24h), High24h: parseFloat(t.High24h),
-					Low24h: parseFloat(t.Low24h), Vol24h: parseFloat(t.Vol24h),
+					Symbol:    t.InstID,
+					LastPrice: last,
+					Open24h:   parseFloat(t.Open24h),
+					High24h:   parseFloat(t.High24h),
+					Low24h:    parseFloat(t.Low24h),
+					Vol24h:    parseFloat(t.Vol24h),
 					UpdatedAt: time.Now(),
 				}
 			}
@@ -227,19 +221,13 @@ func wsLoop() {
 }
 
 func isUSDT(instID string) bool {
-	if len(instID) < 11 {
-		return false
-	}
-	for i := 0; i <= len(instID)-4; i++ {
-		if instID[i:i+4] == "USDT" {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(instID, "-USDT-")
 }
 
 func parseFloat(s string) float64 {
-	var f float64
-	json.Unmarshal([]byte(s), &f)
+	if s == "" {
+		return 0
+	}
+	f, _ := strconv.ParseFloat(s, 64)
 	return f
 }
