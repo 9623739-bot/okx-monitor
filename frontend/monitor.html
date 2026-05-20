@@ -136,7 +136,12 @@
             eventSource.onmessage = function (event) {
                 try {
                     var alert = JSON.parse(event.data);
-                    // 新异动插到最前面
+                    // 去重：相同 ID 不重复添加
+                    var dup = false;
+                    for (var k = 0; k < allAlerts.length; k++) {
+                        if (allAlerts[k].id === alert.id) { dup = true; break; }
+                    }
+                    if (dup) return;
                     allAlerts.unshift(alert);
                     // 最多保留 500 条
                     if (allAlerts.length > 500) allAlerts = allAlerts.slice(0, 500);

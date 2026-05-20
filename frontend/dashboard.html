@@ -161,6 +161,12 @@
             es.onmessage = function (event) {
                 try {
                     var a = JSON.parse(event.data);
+                    // 去重
+                    var dup = false;
+                    for (var k = 0; k < alerts.length; k++) {
+                        if (alerts[k].id === a.id) { dup = true; break; }
+                    }
+                    if (dup) return;
                     alerts.unshift(a);
                     if (alerts.length > 500) alerts = alerts.slice(0, 500);
                     renderAlerts(alerts);
