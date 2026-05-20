@@ -86,6 +86,7 @@ func fetchInstruments() int {
 	resp, err := http.Get("https://www.okx.com/api/v5/public/instruments?instType=SWAP")
 	if err != nil {
 		log.Printf("[INST] 获取产品列表失败: %v", err)
+		LogError("[INST] 获取产品列表失败: " + err.Error())
 		return 0
 	}
 	defer resp.Body.Close()
@@ -143,6 +144,7 @@ func wsLoop() {
 		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 		if err != nil {
 			log.Printf("[WS] 连接失败: %v, 5s重试", err)
+			LogError("[WS] 连接 OKX 失败: " + err.Error())
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -181,10 +183,13 @@ func wsLoop() {
 		tickerCount := 0
 		for {
 			_, msg, err := conn.ReadMessage()
-			if err != nil {
-				log.Printf("[WS] 断开 (%d条ticker): %v", tickerCount, err)
-				break
+		if err != nil {
+			log.Printf("[WS] 断开 (%d条ticker): %v", tickerCount, err)
+			if tickerCount == 0 {
+				LogError("[WS] 无数据断开: " + err.Error())
 			}
+			break
+		}
 
 			var wsMsg OKXWsMsg
 			if err := json.Unmarshal(msg, &wsMsg); err != nil {

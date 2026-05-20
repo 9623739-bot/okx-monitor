@@ -5,6 +5,7 @@ import (
 
 	"okx-monitor/config"
 	"okx-monitor/models"
+	"okx-monitor/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -62,5 +63,14 @@ func UpdateOKXKeys(c *gin.Context) {
 	c.JSON(http.StatusOK, models.APIResponse{
 		Code:    200,
 		Message: "API密钥更新成功",
+	})
+}
+
+// GetErrorLogs 获取错误日志
+func GetErrorLogs(c *gin.Context) {
+	c.JSON(http.StatusOK, models.APIResponse{
+		Code:    200,
+		Message: "success",
+		Data:    services.GetErrors(),
 	})
 }

@@ -49,6 +49,7 @@ func main() {
 		auth.GET("/settings", handlers.GetSettings)
 		auth.POST("/settings", handlers.UpdateSettings)
 		auth.POST("/settings/okx-keys", handlers.UpdateOKXKeys)
+		auth.GET("/logs/errors", handlers.GetErrorLogs)
 	}
 
 	log.Printf("OKX Monitor 启动在端口 %s", cfg.Port)

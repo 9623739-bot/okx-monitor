@@ -142,6 +142,20 @@
                     </form>
                 </div>
 
+                <!-- 错误日志 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">🐞 错误日志</div>
+                            <div class="card-subtitle">系统错误记录（相同错误自动去重，最多100条）</div>
+                        </div>
+                        <button class="btn btn-outline btn-sm" onclick="loadErrorLogs()">🔄 刷新</button>
+                    </div>
+                    <div id="errorLogContainer" style="max-height:400px;overflow-y:auto;">
+                        <div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">暂无错误</div></div>
+                    </div>
+                </div>
+
                 <!-- 关于 -->
                 <div class="card">
                     <div class="card-header">
@@ -294,8 +308,41 @@
             showToast('OKX API 连接测试成功 ✓', 'success');
         }
 
+        // ===== 错误日志 =====
+        async function loadErrorLogs() {
+            var resp = await apiGet('/logs/errors');
+            if (!resp || resp.code !== 200) return;
+            var errors = resp.data || [];
+            var container = document.getElementById('errorLogContainer');
+
+            if (!errors.length) {
+                container.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-text">暂无错误</div></div>';
+                return;
+            }
+
+            var html = '';
+            for (var i = 0; i < errors.length; i++) {
+                var e = errors[i];
+                var timeStr = new Date(e.last_time).toLocaleString('zh-CN');
+                var countBadge = e.count > 1 ? '<span class="tag tag-warning" style="margin-left:8px;font-size:11px;">×' + e.count + '</span>' : '';
+                html += '<div style="padding:8px 16px;border-bottom:1px solid var(--border);font-size:13px;">' +
+                    '<div style="color:var(--text-muted);font-size:11px;margin-bottom:4px;">' + timeStr + countBadge + '</div>' +
+                    '<div style="color:#ef4444;word-break:break-all;">' + escapeHtml(e.message) + '</div>' +
+                    '</div>';
+            }
+            container.innerHTML = html;
+        }
+
+        function escapeHtml(text) {
+            var d = document.createElement('div');
+            d.textContent = text;
+            return d.innerHTML;
+        }
+
         document.addEventListener('DOMContentLoaded', function () {
             loadSettings();
+            loadErrorLogs();
+            setInterval(loadErrorLogs, 10000);
         });
     </script>
 </body>
