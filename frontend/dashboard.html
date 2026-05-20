@@ -229,7 +229,7 @@
                     : '<span class="tag tag-info">未开仓</span>';
                 return '<tr>' +
                     '<td>' + formatTime(a.time) + '</td>' +
-                    '<td><strong>' + a.symbol + '</strong></td>' +
+                    '<td><strong>' + formatSymbol(a.symbol) + '</strong></td>' +
                     '<td>' + dirBadge + '</td>' +
                     '<td>' + formatPrice(a.price_before) + '</td>' +
                     '<td>' + formatPrice(a.price_after) + '</td>' +
@@ -255,7 +255,7 @@
                     : '<span class="badge-down">做空</span>';
                 var pnlClass = p.pnl >= 0 ? 'price-up' : 'price-down';
                 return '<tr>' +
-                    '<td><strong>' + p.symbol + '</strong></td>' +
+                    '<td><strong>' + formatSymbol(p.symbol) + '</strong></td>' +
                     '<td>' + dirBadge + '</td>' +
                     '<td>' + formatPrice(p.entry_price) + '</td>' +
                     '<td>' + p.quantity + '</td>' +

@@ -225,7 +225,7 @@
                 var closePrice = p.close_price ? formatPrice(p.close_price) : '--';
 
                 return '<tr>' +
-                    '<td><strong>' + p.symbol + '</strong></td>' +
+                    '<td><strong>' + formatSymbol(p.symbol) + '</strong></td>' +
                     '<td>' + dirBadge + '</td>' +
                     '<td>' + formatPrice(p.entry_price) + '</td>' +
                     '<td>' + closePrice + '</td>' +

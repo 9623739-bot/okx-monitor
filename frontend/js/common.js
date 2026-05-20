@@ -123,6 +123,11 @@ function formatPnl(pnl) {
     return prefix + pnl.toFixed(2) + ' USDT';
 }
 
+// 去后缀：RLS-USDT-SWAP → RLS
+function formatSymbol(s) {
+    return s ? s.replace('-USDT-SWAP', '') : s;
+}
+
 // ===== 数字动画 =====
 function animateValue(el, start, end, duration) {
     var startTime = null;
