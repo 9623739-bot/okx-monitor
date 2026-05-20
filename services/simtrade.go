@@ -25,6 +25,7 @@ type SimPosition struct {
 	TakeProfit  float64   `json:"take_profit"`  // 止盈价
 	StopLoss    float64   `json:"stop_loss"`    // 止损价
 	ChangePct   float64   `json:"change_pct"`   // 触发异动的涨跌幅
+	CurrPrice   float64   `json:"curr_price"`   // 当前实时价（仅持仓）
 	Status      string    `json:"status"`       // open / closed
 }
 
@@ -62,12 +63,18 @@ func StopSimTrade() {
 	simRunning = false
 }
 
-// GetSimPositions 获取当前持仓
+// GetSimPositions 获取当前持仓（带实时价）
 func GetSimPositions() []*SimPosition {
 	simMu.Lock()
 	defer simMu.Unlock()
 	result := make([]*SimPosition, len(simPositions))
-	copy(result, simPositions)
+	for i, p := range simPositions {
+		cp := *p
+		if tp := GetPrice(p.Symbol); tp != nil {
+			cp.CurrPrice = tp.LastPrice
+		}
+		result[i] = &cp
+	}
 	return result
 }
 

@@ -190,7 +190,7 @@
                     '<td><strong>' + formatSymbol(p.symbol) + '</strong></td>' +
                     '<td>' + dirBadge + '</td>' +
                     '<td>' + formatPrice(p.entry_price) + '</td>' +
-                    '<td>--</td>' +
+                    '<td>' + (p.curr_price ? formatPrice(p.curr_price) : '--') + '</td>' +
                     '<td><span class="price-up">' + formatPrice(p.take_profit) + '</span></td>' +
                     '<td><span class="price-down">' + formatPrice(p.stop_loss) + '</span></td>' +
                     '<td>' + formatPct(p.change_pct, true) + '</td>' +
