@@ -136,6 +136,15 @@ func wsLoop() {
 	url := "wss://ws.okx.com:8443/ws/v5/public"
 	log.Printf("[WS] 初始化连接...")
 
+	// 构建 instId 列表
+	allowMu.RLock()
+	ids := make([]string, 0, len(allowSet))
+	for id := range allowSet {
+		ids = append(ids, id)
+	}
+	allowMu.RUnlock()
+	log.Printf("[WS] 准备订阅 %d 个合约", len(ids))
+
 	for {
 		conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 		if err != nil {
@@ -144,17 +153,26 @@ func wsLoop() {
 			continue
 		}
 
-		log.Printf("[WS] 已连接 OKX 公共频道")
-		sub := map[string]interface{}{
-			"op": "subscribe", "args": []map[string]string{{"channel": "tickers", "instType": "SWAP"}},
+		log.Printf("[WS] 已连接")
+
+		// 分批订阅（每批100个）
+		batch := 100
+		for i := 0; i < len(ids); i += batch {
+			end := i + batch
+			if end > len(ids) {
+				end = len(ids)
+			}
+			args := make([]map[string]string, end-i)
+			for j, id := range ids[i:end] {
+				args[j] = map[string]string{"channel": "tickers", "instId": id}
+			}
+			sub := map[string]interface{}{"op": "subscribe", "args": args}
+			if err := conn.WriteJSON(sub); err != nil {
+				log.Printf("[WS] 订阅失败: %v", err)
+				break
+			}
 		}
-		if err := conn.WriteJSON(sub); err != nil {
-			log.Printf("[WS] 订阅失败: %v", err)
-			conn.Close()
-			time.Sleep(5 * time.Second)
-			continue
-		}
-		log.Printf("[WS] 已发送订阅")
+		log.Printf("[WS] 订阅已发送")
 
 		// 读消息
 		tickerCount := 0
