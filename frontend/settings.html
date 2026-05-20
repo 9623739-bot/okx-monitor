@@ -28,6 +28,10 @@
                     <span class="nav-icon">📋</span>
                     <span>交易记录</span>
                 </a>
+                <a href="/simtrade.html">
+                    <span class="nav-icon">🎯</span>
+                    <span>模拟交易</span>
+                </a>
                 <div class="nav-section">系统</div>
                 <a href="/settings.html" class="active">
                     <span class="nav-icon">⚙️</span>
@@ -77,8 +81,8 @@
                         </div>
                             <div class="form-group">
                                 <label class="form-label">最大持仓数</label>
-                                <input type="number" class="form-input" id="maxPositions" value="3" step="1" min="1" max="20">
-                                <div class="form-hint">同时持有的最大合约数量</div>
+                                <input type="number" class="form-input" id="maxPositions" value="0" step="1" min="0" max="20">
+                                <div class="form-hint">同时持有的最大合约数量（0 = 不限制）</div>
                             </div>
                         </div>
                         <div class="form-row">

@@ -43,7 +43,7 @@ func Get() *AppConfig {
 			Settings: Settings{
 				MonitorInterval:  1,
 				MonitorThreshold: 1.0,
-				MaxPositions:     3,
+				MaxPositions:     0,
 				OrderSize:        100,
 				AutoTrade:        false,
 			},

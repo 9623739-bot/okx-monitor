@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模拟交易 - OKX Monitor</title>
+    <link rel="stylesheet" href="css/base.css?v=2">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 侧边栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">
+                <div class="logo-icon">⚡</div>
+                <span class="logo-text">OKX Monitor</span>
+            </div>
+            <nav class="sidebar-nav">
+                <div class="nav-section">主菜单</div>
+                <a href="/dashboard.html">
+                    <span class="nav-icon">📊</span>
+                    <span>仪表盘</span>
+                </a>
+                <a href="/monitor.html">
+                    <span class="nav-icon">🔔</span>
+                    <span>异动监控</span>
+                </a>
+                <a href="/simtrade.html" class="active">
+                    <span class="nav-icon">🎯</span>
+                    <span>模拟交易</span>
+                </a>
+                <a href="/history.html">
+                    <span class="nav-icon">📋</span>
+                    <span>交易记录</span>
+                </a>
+                <div class="nav-section">系统</div>
+                <a href="/settings.html">
+                    <span class="nav-icon">⚙️</span>
+                    <span>系统设置</span>
+                </a>
+            </nav>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="user-avatar">A</div>
+                    <div>
+                        <div class="user-name">admin</div>
+                        <div class="user-role">管理员</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <header class="topbar">
+                <h1 class="topbar-title">模拟交易</h1>
+                <div class="topbar-actions">
+                    <button class="btn btn-outline btn-sm" onclick="loadAll()">🔄 刷新</button>
+                    <button class="btn btn-outline btn-sm" onclick="logout()">退出登录</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <!-- 统计卡片 -->
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">总交易次数</div>
+                        <div class="stat-value" id="statTotal">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">盈利次数</div>
+                        <div class="stat-value price-up" id="statWins">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">亏损次数</div>
+                        <div class="stat-value price-down" id="statLosses">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">胜率</div>
+                        <div class="stat-value" id="statWinRate">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">累计盈亏 (%)</div>
+                        <div class="stat-value" id="statTotalPnl">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">当前持仓</div>
+                        <div class="stat-value" id="statOpen">--</div>
+                    </div>
+                </div>
+
+                <!-- 当前持仓 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">当前模拟持仓</div>
+                            <div class="card-subtitle">等待止盈或止损触发</div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>入场价</th>
+                                    <th>当前价</th>
+                                    <th>止盈</th>
+                                    <th>止损</th>
+                                    <th>异动%</th>
+                                    <th>持仓时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="positionsTable">
+                                <tr><td colspan="8"><div class="loading-overlay"><div class="loading-spinner"></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 已平仓历史 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">平仓历史</div>
+                            <div class="card-subtitle">模拟交易记录</div>
+                        </div>
+                    </div>
+                    <div class="table-container">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>合约</th>
+                                    <th>方向</th>
+                                    <th>入场价</th>
+                                    <th>平仓价</th>
+                                    <th>异动%</th>
+                                    <th>盈亏%</th>
+                                    <th>开仓时间</th>
+                                    <th>平仓时间</th>
+                                </tr>
+                            </thead>
+                            <tbody id="historyTable">
+                                <tr><td colspan="8"><div class="loading-overlay"><div class="loading-spinner"></div></div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/common.js?v=2"></script>
+    <script>
+        async function loadAll() {
+            var statsResp = await apiGet('/sim/stats');
+            var posResp = await apiGet('/sim/positions');
+            var histResp = await apiGet('/sim/history');
+
+            renderStats(statsResp && statsResp.data);
+            renderPositions(posResp && posResp.data || []);
+            renderHistory(histResp && histResp.data || []);
+        }
+
+        function renderStats(stats) {
+            if (!stats) return;
+            document.getElementById('statTotal').textContent = stats.total_trades;
+            document.getElementById('statWins').textContent = stats.wins;
+            document.getElementById('statLosses').textContent = stats.losses;
+            document.getElementById('statWinRate').textContent = (stats.win_rate || 0).toFixed(1) + '%';
+
+            var pnl = stats.total_pnl_pct || 0;
+            var pnlEl = document.getElementById('statTotalPnl');
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + '%';
+            pnlEl.className = 'stat-value ' + (pnl >= 0 ? 'price-up' : 'price-down');
+        }
+
+        function renderPositions(positions) {
+            var tbody = document.getElementById('positionsTable');
+            document.getElementById('statOpen').textContent = positions.length;
+
+            if (!positions.length) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📭</div><div class="empty-text">暂无持仓</div></div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = positions.map(function (p) {
+                var dirBadge = p.direction === 'long'
+                    ? '<span class="badge-up">做多</span>'
+                    : '<span class="badge-down">做空</span>';
+                return '<tr>' +
+                    '<td><strong>' + formatSymbol(p.symbol) + '</strong></td>' +
+                    '<td>' + dirBadge + '</td>' +
+                    '<td>' + formatPrice(p.entry_price) + '</td>' +
+                    '<td>--</td>' +
+                    '<td><span class="price-up">' + formatPrice(p.take_profit) + '</span></td>' +
+                    '<td><span class="price-down">' + formatPrice(p.stop_loss) + '</span></td>' +
+                    '<td>' + formatPct(p.change_pct, true) + '</td>' +
+                    '<td style="color:var(--text-muted);font-size:12px;">' + formatTime(p.entry_time) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        function renderHistory(history) {
+            var tbody = document.getElementById('historyTable');
+
+            if (!history.length) {
+                tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="empty-icon">📋</div><div class="empty-text">暂无记录</div></div></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = history.map(function (p) {
+                var dirBadge = p.direction === 'long'
+                    ? '<span class="badge-up">做多</span>'
+                    : '<span class="badge-down">做空</span>';
+                var pnlClass = (p.pnl_pct || 0) >= 0 ? 'price-up' : 'price-down';
+                return '<tr>' +
+                    '<td><strong>' + formatSymbol(p.symbol) + '</strong></td>' +
+                    '<td>' + dirBadge + '</td>' +
+                    '<td>' + formatPrice(p.entry_price) + '</td>' +
+                    '<td>' + formatPrice(p.close_price) + '</td>' +
+                    '<td>' + formatPct(p.change_pct, true) + '</td>' +
+                    '<td class="' + pnlClass + '" style="font-weight:600;">' + formatPct(p.pnl_pct || 0, true) + '</td>' +
+                    '<td>' + formatTime(p.entry_time) + '</td>' +
+                    '<td>' + formatTime(p.close_time) + '</td>' +
+                    '</tr>';
+            }).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            loadAll();
+            setInterval(loadAll, 3000);
+        });
+    </script>
+</body>
+</html>

@@ -19,6 +19,9 @@ func main() {
 	// 启动异动监控引擎
 	services.StartMonitor()
 
+	// 启动模拟交易引擎
+	services.StartSimTrade()
+
 	r := gin.Default()
 
 	// 静态文件
@@ -30,6 +33,7 @@ func main() {
 	r.StaticFile("/monitor.html", "./frontend/monitor.html")
 	r.StaticFile("/history.html", "./frontend/history.html")
 	r.StaticFile("/settings.html", "./frontend/settings.html")
+	r.StaticFile("/simtrade.html", "./frontend/simtrade.html")
 
 	// API路由（部分接口需要登录）
 	api := r.Group("/api")
@@ -50,6 +54,11 @@ func main() {
 		auth.POST("/settings", handlers.UpdateSettings)
 		auth.POST("/settings/okx-keys", handlers.UpdateOKXKeys)
 		auth.GET("/logs/errors", handlers.GetErrorLogs)
+
+		// 模拟交易
+		auth.GET("/sim/positions", handlers.GetSimPositions)
+		auth.GET("/sim/history", handlers.GetSimHistory)
+		auth.GET("/sim/stats", handlers.GetSimStats)
 	}
 
 	log.Printf("OKX Monitor 启动在端口 %s", cfg.Port)

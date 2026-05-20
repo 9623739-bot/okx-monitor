@@ -44,7 +44,11 @@ func AddAlert(alert models.Alert) {
 	select {
 	case AlertCh <- alert:
 	default:
-		// 通道满则丢弃，避免阻塞
+	}
+	// 推送到模拟交易引擎
+	select {
+	case SimAlertCh <- alert:
+	default:
 	}
 }
 
