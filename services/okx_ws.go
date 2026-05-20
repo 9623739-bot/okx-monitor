@@ -123,11 +123,10 @@ func fetchInstruments() int {
 	return cryptoCount
 }
 
-// StartOKXWebSocket 启动行情（WebSocket + REST兜底）
+// StartOKXWebSocket 启动行情
 func StartOKXWebSocket() {
 	fetchInstruments()
 	go wsLoop()
-	go restPoller()
 }
 
 // StopOKXWebSocket 停止
@@ -206,47 +205,6 @@ func wsLoop() {
 		conn.Close()
 		log.Printf("[WS] 5s后重连...")
 		time.Sleep(5 * time.Second)
-	}
-}
-
-// restPoller REST API 兜底轮询（保证 WebSocket 不通时也有数据）
-func restPoller() {
-	tick := time.NewTicker(1 * time.Second)
-	defer tick.Stop()
-	for range tick.C {
-		resp, err := http.Get("https://www.okx.com/api/v5/market/tickers?instType=SWAP")
-		if err != nil {
-			continue
-		}
-		var result struct {
-			Code string      `json:"code"`
-			Data []OKXTicker `json:"data"`
-		}
-		json.NewDecoder(resp.Body).Decode(&result)
-		resp.Body.Close()
-		if result.Code != "0" {
-			continue
-		}
-		priceMu.Lock()
-		for _, t := range result.Data {
-			allowMu.RLock()
-			if !allowSet[t.InstID] {
-				allowMu.RUnlock()
-				continue
-			}
-			allowMu.RUnlock()
-			last := parseFloat(t.Last)
-			if last == 0 {
-				continue
-			}
-			priceMap[t.InstID] = &TickerPrice{
-				Symbol: t.InstID, LastPrice: last,
-				Open24h: parseFloat(t.Open24h), High24h: parseFloat(t.High24h),
-				Low24h: parseFloat(t.Low24h), Vol24h: parseFloat(t.Vol24h),
-				UpdatedAt: time.Now(),
-			}
-		}
-		priceMu.Unlock()
 	}
 }
 
