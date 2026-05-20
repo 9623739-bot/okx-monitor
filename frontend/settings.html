@@ -160,6 +160,25 @@
                     </div>
                 </div>
 
+                <!-- 数据管理 -->
+                <div class="card">
+                    <div class="card-header">
+                        <div>
+                            <div class="card-title">🗑️ 数据管理</div>
+                            <div class="card-subtitle">清除异动记录和模拟交易数据</div>
+                        </div>
+                    </div>
+                    <div style="padding:16px;">
+                        <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px;">
+                            此操作将清除所有异动记录和模拟持仓/历史，快照也会重置。不可恢复。
+                        </p>
+                        <button class="btn btn-outline" onclick="resetAllData()" id="resetBtn">
+                            <span id="resetText">🗑️ 重置所有数据</span>
+                            <span id="resetSpinner" class="loading-spinner" style="display:none;width:16px;height:16px;border-width:2px;"></span>
+                        </button>
+                    </div>
+                </div>
+
                 <!-- 关于 -->
                 <div class="card">
                     <div class="card-header">
@@ -341,6 +360,29 @@
             var d = document.createElement('div');
             d.textContent = text;
             return d.innerHTML;
+        }
+
+        // ===== 重置数据 =====
+        async function resetAllData() {
+            if (!confirm('确定要清除所有异动记录和模拟交易数据吗？此操作不可恢复。')) return;
+
+            var btn = document.getElementById('resetBtn');
+            var btnText = document.getElementById('resetText');
+            var btnSpinner = document.getElementById('resetSpinner');
+            btnText.style.display = 'none';
+            btnSpinner.style.display = 'inline-block';
+            btn.disabled = true;
+
+            var resp = await apiPost('/reset');
+            btnText.style.display = 'inline';
+            btnSpinner.style.display = 'none';
+            btn.disabled = false;
+
+            if (resp && resp.code === 200) {
+                showToast(resp.message, 'success');
+            } else {
+                showToast('重置失败', 'error');
+            }
         }
 
         document.addEventListener('DOMContentLoaded', function () {

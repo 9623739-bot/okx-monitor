@@ -74,3 +74,13 @@ func GetErrorLogs(c *gin.Context) {
 		Data:    services.GetErrors(),
 	})
 }
+
+// ResetAll 重置异动和模拟记录
+func ResetAll(c *gin.Context) {
+	services.ClearAlerts()
+	services.ClearSimData()
+	c.JSON(http.StatusOK, models.APIResponse{
+		Code:    200,
+		Message: "已清除所有异动和模拟记录",
+	})
+}

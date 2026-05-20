@@ -67,6 +67,17 @@ func StopMonitor() {
 	running = false
 }
 
+// ClearAlerts 清除所有异动记录
+func ClearAlerts() {
+	alertStoreMu.Lock()
+	defer alertStoreMu.Unlock()
+	alertStore = alertStore[:0]
+	// 也重置快照，避免旧价格影响
+	snapshotMu.Lock()
+	SnapshotPrices = make(map[string]float64)
+	snapshotMu.Unlock()
+}
+
 func monitorLoop() {
 	for running {
 		cfg := config.Get()

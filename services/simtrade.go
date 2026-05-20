@@ -63,6 +63,14 @@ func StopSimTrade() {
 	simRunning = false
 }
 
+// ClearSimData 清除所有模拟数据
+func ClearSimData() {
+	simMu.Lock()
+	defer simMu.Unlock()
+	simPositions = nil
+	simHistory = nil
+}
+
 // GetSimPositions 获取当前持仓（带实时价）
 func GetSimPositions() []*SimPosition {
 	simMu.Lock()

@@ -55,6 +55,9 @@ func main() {
 		auth.POST("/settings/okx-keys", handlers.UpdateOKXKeys)
 		auth.GET("/logs/errors", handlers.GetErrorLogs)
 
+		// 重置
+		auth.POST("/reset", handlers.ResetAll)
+
 		// 模拟交易
 		auth.GET("/sim/positions", handlers.GetSimPositions)
 		auth.GET("/sim/history", handlers.GetSimHistory)
